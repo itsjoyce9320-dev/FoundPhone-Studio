@@ -571,7 +571,7 @@ export function WhatsAppSkin(p: SkinProps) {
             <Phone size={17} />
           </div>
           <MessageList
-            items={p.items.filter((i) => i.title === p.thread)}
+            items={p.items.filter((i) => i.title === p.thread && i.meta.recordType !== "contact")}
             creator={p.creator}
             onItem={p.onItem}
             onRead={p.onRead}
@@ -608,7 +608,7 @@ export function WhatsAppSkin(p: SkinProps) {
               {shownConversations
                 .map((t) => {
                   const messages = chatItems.filter((i) => i.title === t);
-                  const last = messages.at(-1)!;
+                  const last = messages.filter((i) => i.meta.recordType !== "contact").at(-1) || messages.at(-1)!;
                   const unread = unreadCount(messages);
                   return (
                     <button
@@ -616,12 +616,12 @@ export function WhatsAppSkin(p: SkinProps) {
                       key={t}
                       onClick={() => openThread(t)}
                     >
-                      <Avatar name={t} src={last.avatar} round />
+                      <Avatar name={t} src={messages.find((i) => i.meta.recordType === "contact")?.avatar || last.avatar} round />
                       <div>
                         <strong>{t}</strong>
                         <p>
                           {last.outgoing && <CheckCheck size={12} />}{" "}
-                          {last.kind === "image" ? "照片" : last.kind === "video" ? "视频" : last.kind === "audio" ? "语音消息" : last.body}
+                          {last.meta.recordType === "contact" ? "暂无消息" : last.kind === "image" ? "照片" : last.kind === "video" ? "视频" : last.kind === "audio" ? "语音消息" : last.body}
                         </p>
                       </div>
                       <span className={`wa-row-meta ${unread ? "has-unread" : ""}`}>
