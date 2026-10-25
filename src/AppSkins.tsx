@@ -1,6 +1,8 @@
 import { NativeComposer } from "./DeviceSystem";
 import { useSkinState } from "./skinState";
 import { useState } from "react";
+import "./whatsapp.css";
+import { whatsappMessages, whatsappThreads, whatsappUnread } from "./whatsapp";
 import {
   ChevronLeft,
   Plus,
@@ -514,17 +516,20 @@ export function WhatsAppSkin(p: SkinProps) {
     { label: "聊天", icon: MessageCircle },
     { label: "设置", icon: Settings },
   ];
-  const conversations = [
-    ...new Set(
-      p.items
-        .filter((i) => !["动态", "通话", "社区", "设置"].includes(i.folder))
-        .filter((i) => filter !== "未读" || !i.read)
-        .map((i) => i.title),
-    ),
-  ];
+  const [readMessages, setReadMessages] = useSkinState<string[]>(p, "waReadMessages", []);
+  const chatItems = whatsappMessages(p.items);
+  const unreadCount = (items: Item[]) => whatsappUnread(items, readMessages);
+  const openThread = (title: string) => {
+    const messages = chatItems.filter((i) => i.title === title);
+    setReadMessages((ids) => [...new Set([...ids, ...messages.map((i) => i.id)])]);
+    p.onThread(title);
+    p.onRead(title);
+  };
+  const shownConversations = whatsappThreads(p.items, query, filter, readMessages);
+  const records = p.items.filter((i) => i.folder === tab || (tab === "通话" && i.kind === "call"));
   const name = tab === "聊天" ? p.name : tab;
   return (
-    <div className="whatsapp-ui independent-skin">
+    <div className="whatsapp-ui independent-skin" data-thread={!!p.thread}>
       <div className="app-nav wa-nav">
         <button
           aria-label="返回"
@@ -592,6 +597,7 @@ export function WhatsAppSkin(p: SkinProps) {
                 {["全部", "未读", "群组"].map((f) => (
                   <button
                     key={f}
+                    aria-pressed={filter === f}
                     className={filter === f ? "selected" : ""}
                     onClick={() => setFilter(f)}
                   >
@@ -599,42 +605,40 @@ export function WhatsAppSkin(p: SkinProps) {
                   </button>
                 ))}
               </div>
-              {conversations
-                .filter((t) => t.includes(query))
-                .filter(
-                  (t) =>
-                    filter !== "群组" ||
-                    p.items.some((i) => i.title === t && i.folder === "群组"),
-                )
+              {shownConversations
                 .map((t) => {
-                  const last = p.items.filter((i) => i.title === t).at(-1)!;
+                  const messages = chatItems.filter((i) => i.title === t);
+                  const last = messages.at(-1)!;
+                  const unread = unreadCount(messages);
                   return (
                     <button
                       className="wa-chat-row"
                       key={t}
-                      onClick={() => {
-                        p.onThread(t);
-                        p.onRead(t);
-                      }}
+                      onClick={() => openThread(t)}
                     >
                       <Avatar name={t} src={last.avatar} round />
                       <div>
                         <strong>{t}</strong>
                         <p>
                           {last.outgoing && <CheckCheck size={12} />}{" "}
-                          {last.body}
+                          {last.kind === "image" ? "照片" : last.kind === "video" ? "视频" : last.kind === "audio" ? "语音消息" : last.body}
                         </p>
                       </div>
-                      <time>{last.time.slice(-5)}</time>
+                      <span className={`wa-row-meta ${unread ? "has-unread" : ""}`}>
+                        <time>{last.time.slice(-5)}</time>
+                        {unread > 0 && <b className="wa-unread" aria-label={`${unread} 条未读消息`}>{unread}</b>}
+                      </span>
                     </button>
                   );
                 })}
+              {!shownConversations.length && <p className="skin-empty" role="status">{query.trim() ? "未找到匹配的聊天" : filter === "未读" ? "暂无未读消息" : filter === "群组" ? "暂无群组聊天" : "暂无聊天"}</p>}
+              <p className="wa-list-footer">你的聊天记录仅用于此互动故事</p>
             </>
           ) : tab === "设置" ? (
             <>
               <div className="wa-settings-profile">
-                <Avatar name="我" round />
-                <h2>个人资料</h2>
+                <Avatar name={p.owner || "我"} round />
+                <div><h2>{p.owner || "个人资料"}</h2><small>WhatsApp · 个人资料</small></div>
               </div>
               {p.items
                 .filter((i) => i.folder === "设置")
@@ -653,7 +657,7 @@ export function WhatsAppSkin(p: SkinProps) {
             <>
               {tab === "动态" && (
                 <div className="wa-status">
-                  <Avatar name="我" round />
+                  <Avatar name={p.owner || "我"} round />
                   <span>我的状态</span>
                   {p.creator && (
                     <button aria-label="添加状态" onClick={p.onAdd}>
@@ -662,11 +666,7 @@ export function WhatsAppSkin(p: SkinProps) {
                   )}
                 </div>
               )}
-              {p.items
-                .filter(
-                  (i) =>
-                    i.folder === tab || (tab === "通话" && i.kind === "call"),
-                )
+              {records
                 .map((i) => (
                   <button
                     className="wa-record"
@@ -687,7 +687,7 @@ export function WhatsAppSkin(p: SkinProps) {
                     </span>
                   </button>
                 ))}
-              {!p.items.some((i) => i.folder === tab) && (
+              {!records.length && (
                 <p className="skin-empty">暂无{tab}内容</p>
               )}
             </>
@@ -704,6 +704,7 @@ export function WhatsAppSkin(p: SkinProps) {
           {tabs.map((t) => (
             <button
               className={tab === t.label ? "selected" : ""}
+              aria-current={tab === t.label ? "page" : undefined}
               key={t.label}
               onClick={() => setTab(t.label)}
             >
